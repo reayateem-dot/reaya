@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Reaya health assistant using Amazon Nova Lite in eu-north-1.
+
+Parameters:
+  CodeBucket:
+    Type: String
+    Description: Private S3 bucket containing the packaged Lambda function.
+  CodeKey:
+    Type: String
+    Description: S3 object key for the packaged Lambda function.
+
+Resources:
+  ReayaAssistantLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: /aws/lambda/reaya-bedrock-assistant
+      RetentionInDays: 7
+
+  ReayaAssistantApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: reaya-bedrock-assistant
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - authorization
+          - content-type
+        AllowMethods:
+          - POST
+          - OPTIONS
+        MaxAge: 600
+
+  ReayaAssistantRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: reaya-bedrock-assistant-lambda
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: reaya-bedrock-assistant-runtime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${ReayaAssistantLogGroup.Arn}:*"
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-lite-v1:0"
+
+  ReayaAssistantFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: reaya-bedrock-assistant
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt ReayaAssistantRole.Arn
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: 5
+      Environment:
+        Variables:
+          FIREBASE_PROJECT_ID: reaya-7f077
+          BEDROCK_MODEL_ID: amazon.nova-lite-v1:0
+      DependsOn:
+        - ReayaAssistantLogGroup
+
+  ReayaAssistantInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ReayaAssistantFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ReayaAssistantApi}/*/POST/api/chat"
+
+  ReayaAssistantIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    DependsOn:
+      - ReayaAssistantInvokePermission
+    Properties:
+      ApiId: !Ref ReayaAssistantApi
+      IntegrationType: AWS_PROXY
+      IntegrationMethod: POST
+      IntegrationUri: !GetAtt ReayaAssistantFunction.Arn
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 29000
+
+  ReayaAssistantChatRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReayaAssistantApi
+      RouteKey: "POST /api/chat"
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref ReayaAssistantIntegration
+
+  ReayaAssistantStage:
+    Type: AWS::ApiGatewayV2::Stage
+    DependsOn:
+      - ReayaAssistantChatRoute
+    Properties:
+      ApiId: !Ref ReayaAssistantApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 5
+        ThrottlingRateLimit: 2
+
+Outputs:
+  AssistantApiUrl:
+    Description: HTTPS endpoint for the Reaya Bedrock assistant
+    Value: !Sub "https://${ReayaAssistantApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/api/chat"

@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /users/{userId}/favorites/{serviceId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['serviceId'])
+        && request.resource.data.serviceId == serviceId;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/medicines/{medicineId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'id',
+          'name',
+          'dose',
+          'times',
+          'remaining',
+          'totalQuantity',
+          'notes'
+        ])
+        && request.resource.data.id == medicineId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.dose is string
+        && request.resource.data.dose.size() <= 200
+        && request.resource.data.times is list
+        && request.resource.data.times.size() <= 12
+        && request.resource.data.remaining is int
+        && request.resource.data.remaining >= 0
+        && request.resource.data.totalQuantity is int
+        && request.resource.data.totalQuantity >= request.resource.data.remaining
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 1000;
+    }
+
+    match /_geminiRateLimits/{userId} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

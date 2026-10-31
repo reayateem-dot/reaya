@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "751300082920",
+    "project_id": "reaya-7f077",
+    "storage_bucket": "reaya-7f077.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:751300082920:android:5110c6a4cf383d5d4edd5d",
+        "android_client_info": {
+          "package_name": "com.company.reaya"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdzsFb20MMl2uVdWfBCuB7rK7UrWmD-vo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
